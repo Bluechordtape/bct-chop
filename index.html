@@ -185,6 +185,16 @@ body {
   cursor: not-allowed;
 }
 
+.btn-prev {
+  background: #6070b8;
+  border-color: #404898;
+  color: #fff;
+  padding: 5px 11px;
+  font-size: 11px;
+}
+.btn-prev.playing { background: #c04020; border-color: #a02810; }
+.btn-prev:disabled { background: #bfb4a4; border-color: #a09080; color: rgba(74,48,16,0.35); cursor: not-allowed; }
+
 /* ── Pad grid ── */
 .pad-grid {
   display: grid;
@@ -439,6 +449,34 @@ input[type=range]::-webkit-slider-thumb {
 .btn-rename { background: #5080d0; border-color: #3060b0; color: #fff; flex:1; padding: 7px; border-radius: 6px; font-size: 11px; }
 .btn-delete { background: #c84030; border-color: #a02818; color: #fff; flex:1; padding: 7px; border-radius: 6px; font-size: 11px; }
 .btn-cancel { background: #c8b8a8; border-color: #a09080; color: #4a3010; flex:1; padding: 7px; border-radius: 6px; font-size: 11px; }
+
+.pitch-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(74,48,16,0.07);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+.pitch-display {
+  flex: 1;
+  text-align: center;
+  font-size: 16px;
+  font-weight: bold;
+  color: var(--amber);
+  letter-spacing: 1px;
+}
+.btn-pitch {
+  background: #c8b8a8;
+  border-color: #a09080;
+  color: #4a3010;
+  width: 34px;
+  height: 34px;
+  font-size: 20px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  line-height: 1;
+}
 </style>
 </head>
 <body>
@@ -462,6 +500,7 @@ input[type=range]::-webkit-slider-thumb {
     <div class="wave-footer">
       <span class="wave-hint" id="waveHint">REC 또는 파일 업로드 후 드래그로 구간 선택</span>
       <span class="wave-info" id="waveInfo"></span>
+      <button id="prevBtn" class="btn btn-prev" disabled>▶ PRE</button>
       <button id="chopBtn" class="btn btn-chop" disabled>CHOP</button>
     </div>
   </div>
@@ -502,6 +541,12 @@ input[type=range]::-webkit-slider-thumb {
   <div class="modal-box">
     <div class="modal-title" id="modalTitle">PAD 1</div>
     <input type="text" class="modal-input" id="renameInput" placeholder="새 이름 입력">
+    <div class="pitch-row">
+      <span class="lbl">PITCH</span>
+      <button class="btn btn-pitch" id="pitchDown">−</button>
+      <span class="pitch-display" id="pitchDisplay">±0 st</span>
+      <button class="btn btn-pitch" id="pitchUp">+</button>
+    </div>
     <div class="modal-btns">
       <button class="btn btn-rename" id="renameBtn">RENAME</button>
       <button class="btn btn-delete" id="deleteBtn">DELETE</button>
@@ -539,7 +584,7 @@ const PAD_COLORS = [
   '#8068c0','#c08840','#3898a0','#a85068'
 ];
 
-const pads = Array.from({length:16}, () => ({buf: null, name: '', color: ''}));
+const pads = Array.from({length:16}, () => ({buf: null, name: '', color: '', pitch: 0}));
 const activeSrc = new Array(16).fill(null);
 
 // ─── Build Pad DOM ─────────────────────────────────────────────────────────────
@@ -562,7 +607,8 @@ function refreshPad(i) {
   el.style.background = p.buf ? p.color : '';
   el.style.borderColor = '';
   const nameEl = el.querySelector('.pad-name');
-  nameEl.textContent = p.buf ? (p.name || `S${i+1}`) : '';
+  const pitchTag = p.pitch ? ` ${p.pitch > 0 ? '+' : ''}${p.pitch}` : '';
+  nameEl.textContent = p.buf ? ((p.name || `S${i+1}`) + pitchTag) : '';
   let dot = el.querySelector('.pad-empty-dot');
   if (!p.buf) {
     if (!dot) { dot = document.createElement('div'); dot.className = 'pad-empty-dot'; el.appendChild(dot); }
@@ -584,6 +630,7 @@ function playPad(i) {
   }
   const src = ctx.createBufferSource();
   src.buffer = p.buf;
+  src.playbackRate.value = Math.pow(2, (p.pitch || 0) / 12);
   src.connect(smplGainNode);
   src.start();
   activeSrc[i] = src;
@@ -636,11 +683,16 @@ const padModal   = document.getElementById('padModal');
 const modalTitle = document.getElementById('modalTitle');
 const renameInput = document.getElementById('renameInput');
 
+const pitchDisplay = document.getElementById('pitchDisplay');
+
+function fmtPitch(st) { return st === 0 ? '±0 st' : (st > 0 ? `+${st} st` : `${st} st`); }
+
 function openPadModal(i) {
   if (!pads[i].buf) return;
   modalIdx = i;
   modalTitle.textContent = `── PAD ${i+1} ──`;
   renameInput.value = pads[i].name || `S${i+1}`;
+  pitchDisplay.textContent = fmtPitch(pads[i].pitch || 0);
   padModal.classList.remove('hidden');
   setTimeout(() => renameInput.focus(), 80);
 }
@@ -658,13 +710,27 @@ document.getElementById('renameBtn').addEventListener('click', () => {
 document.getElementById('deleteBtn').addEventListener('click', () => {
   if (modalIdx < 0) return;
   if (activeSrc[modalIdx]) { try { activeSrc[modalIdx].stop(); } catch(e){} activeSrc[modalIdx] = null; }
-  pads[modalIdx] = {buf: null, name: '', color: ''};
+  pads[modalIdx] = {buf: null, name: '', color: '', pitch: 0};
   refreshPad(modalIdx);
   closePadModal();
 });
 
 document.getElementById('cancelBtn').addEventListener('click', closePadModal);
 padModal.addEventListener('click', e => { if (e.target === padModal) closePadModal(); });
+
+// Pitch controls
+document.getElementById('pitchDown').addEventListener('click', () => {
+  if (modalIdx < 0) return;
+  pads[modalIdx].pitch = Math.max(-24, (pads[modalIdx].pitch || 0) - 1);
+  pitchDisplay.textContent = fmtPitch(pads[modalIdx].pitch);
+  refreshPad(modalIdx);
+});
+document.getElementById('pitchUp').addEventListener('click', () => {
+  if (modalIdx < 0) return;
+  pads[modalIdx].pitch = Math.min(24, (pads[modalIdx].pitch || 0) + 1);
+  pitchDisplay.textContent = fmtPitch(pads[modalIdx].pitch);
+  refreshPad(modalIdx);
+});
 
 // ─── Waveform Canvas ───────────────────────────────────────────────────────────
 const canvas  = document.getElementById('waveCanvas');
@@ -849,7 +915,7 @@ canvas.addEventListener('pointerup', e => {
       if (span > 0.001 && waveBuffer) {
         const dur = waveBuffer.duration * span;
         waveHint.textContent = `선택: ${dur.toFixed(2)}s (${(viewEnd-viewStart<0.999?'확대됨':'전체')}) → CHOP`;
-        chopBtn.disabled = false;
+        chopBtn.disabled = false; prevBtn.disabled = false;
       }
     }
   } else if (activePointers.size === 1) {
@@ -892,7 +958,7 @@ recBtn.addEventListener('pointerdown', async e => {
         selA = 0; selB = 1; viewStart = 0; viewEnd = 1;
         resizeCanvas();
         updateWaveInfo();
-        chopBtn.disabled = false;
+        chopBtn.disabled = false; prevBtn.disabled = false;
         waveHint.textContent = '드래그로 구간 선택 후 CHOP';
       } catch(err) { alert('오디오 디코딩 실패: ' + err.message); }
     };
@@ -927,7 +993,7 @@ document.getElementById('fileIn').addEventListener('change', async e => {
     selA = 0; selB = 1;
     resizeCanvas();
     updateWaveInfo();
-    chopBtn.disabled = false;
+    chopBtn.disabled = false; prevBtn.disabled = false;
     waveHint.textContent = '드래그로 구간 선택 후 CHOP';
   } catch(err) { alert('파일 디코딩 실패: ' + err.message); }
   e.target.value = '';
@@ -951,6 +1017,34 @@ function sliceBuffer(buf, s, e) {
   return out;
 }
 
+// ─── Preview selection ─────────────────────────────────────────────────────────
+const prevBtn = document.getElementById('prevBtn');
+let previewSrc = null;
+
+function stopPreview() {
+  if (previewSrc) { try { previewSrc.stop(); } catch(e){} previewSrc = null; }
+  prevBtn.textContent = '▶ PRE';
+  prevBtn.classList.remove('playing');
+}
+
+prevBtn.addEventListener('click', () => {
+  if (previewSrc) { stopPreview(); return; }
+  if (!waveBuffer || selA < 0) return;
+  boot();
+  const s = Math.min(selA, selB), e = Math.max(selA, selB);
+  if (e - s < 0.001) return;
+  const sliced = sliceBuffer(waveBuffer, s, e);
+  const src = ctx.createBufferSource();
+  src.buffer = sliced;
+  src.connect(smplGainNode);
+  src.start();
+  previewSrc = src;
+  prevBtn.textContent = '■ PRE';
+  prevBtn.classList.add('playing');
+  src.onended = stopPreview;
+});
+
+// ─── Chop ──────────────────────────────────────────────────────────────────────
 chopBtn.addEventListener('click', () => {
   if (!waveBuffer || selA < 0) return;
   const s = Math.min(selA, selB), e = Math.max(selA, selB);
@@ -966,6 +1060,7 @@ chopBtn.addEventListener('click', () => {
   pads[idx].buf   = sliced;
   pads[idx].name  = `C${chopCount}`;
   pads[idx].color = PAD_COLORS[idx % PAD_COLORS.length];
+  pads[idx].pitch = 0;
   refreshPad(idx);
 
   // Flash the assigned pad
