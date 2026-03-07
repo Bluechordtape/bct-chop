@@ -674,8 +674,20 @@ const waveInfo = document.getElementById('waveInfo');
 const chopBtn  = document.getElementById('chopBtn');
 
 let waveBuffer = null;
-let selA = -1, selB = -1;   // selection in 0..1 (raw drag points)
+let selA = -1, selB = -1;     // selection: 0..1 of full buffer
+let viewStart = 0, viewEnd = 1; // visible window: 0..1 of full buffer
 let isDragging = false;
+
+// Pinch zoom state
+const activePointers = new Map();
+let pinchStartDist = 0, pinchStartView = null, pinchCenterRatio = 0;
+
+function bufToCanvas(ratio, W) {
+  return (ratio - viewStart) / (viewEnd - viewStart) * W;
+}
+function canvasToBuf(px, W) {
+  return viewStart + (px / W) * (viewEnd - viewStart);
+}
 
 function resizeCanvas() {
   const dpr = window.devicePixelRatio || 1;
@@ -705,30 +717,28 @@ function drawWave() {
     return;
   }
 
-  // Waveform data (ch 0)
+  // Draw only the visible window (viewStart..viewEnd of buffer)
   const data = waveBuffer.getChannelData(0);
-  const step = Math.max(1, Math.floor(data.length / W));
+  const bufStart = Math.floor(viewStart * data.length);
+  const bufEnd   = Math.ceil(viewEnd   * data.length);
+  const visLen   = Math.max(1, bufEnd - bufStart);
+  const spp      = visLen / W; // samples per pixel
 
-  // Draw waveform body
-  ctx2.beginPath();
   const mid = H / 2;
+  ctx2.beginPath();
   ctx2.moveTo(0, mid);
   for (let x = 0; x < W; x++) {
+    const s = Math.floor(bufStart + x * spp);
+    const e = Math.min(data.length, Math.ceil(s + spp));
     let peak = 0;
-    const off = x * step;
-    for (let j = 0; j < step; j++) {
-      const v = data[off + j];
-      if (v !== undefined && Math.abs(v) > peak) peak = Math.abs(v);
-    }
+    for (let j = s; j < e; j++) { const v = Math.abs(data[j]); if (v > peak) peak = v; }
     ctx2.lineTo(x, mid - peak * mid * 0.88);
   }
   for (let x = W - 1; x >= 0; x--) {
+    const s = Math.floor(bufStart + x * spp);
+    const e = Math.min(data.length, Math.ceil(s + spp));
     let peak = 0;
-    const off = x * step;
-    for (let j = 0; j < step; j++) {
-      const v = data[off + j];
-      if (v !== undefined && Math.abs(v) > peak) peak = Math.abs(v);
-    }
+    for (let j = s; j < e; j++) { const v = Math.abs(data[j]); if (v > peak) peak = v; }
     ctx2.lineTo(x, mid + peak * mid * 0.88);
   }
   ctx2.closePath();
@@ -744,51 +754,115 @@ function drawWave() {
   ctx2.lineWidth = 0.5;
   ctx2.beginPath(); ctx2.moveTo(0, mid); ctx2.lineTo(W, mid); ctx2.stroke();
 
-  // Selection overlay
+  // Selection overlay — map buffer coords → canvas pixels
   if (selA >= 0 && selB >= 0 && Math.abs(selB - selA) > 0.001) {
-    const sx = Math.min(selA, selB) * W;
-    const ex = Math.max(selA, selB) * W;
-    ctx2.fillStyle = 'rgba(255,255,255,0.22)';
-    ctx2.fillRect(sx, 0, ex - sx, H);
-    ctx2.strokeStyle = '#fff';
-    ctx2.lineWidth = 1.5;
-    ctx2.beginPath();
-    ctx2.moveTo(sx, 0); ctx2.lineTo(sx, H);
-    ctx2.moveTo(ex, 0); ctx2.lineTo(ex, H);
-    ctx2.stroke();
+    const px1 = Math.max(0, Math.min(W, bufToCanvas(Math.min(selA, selB), W)));
+    const px2 = Math.max(0, Math.min(W, bufToCanvas(Math.max(selA, selB), W)));
+    if (px2 > px1) {
+      ctx2.fillStyle = 'rgba(255,255,255,0.22)';
+      ctx2.fillRect(px1, 0, px2 - px1, H);
+      ctx2.strokeStyle = '#fff';
+      ctx2.lineWidth = 1.5;
+      ctx2.beginPath();
+      ctx2.moveTo(px1, 0); ctx2.lineTo(px1, H);
+      ctx2.moveTo(px2, 0); ctx2.lineTo(px2, H);
+      ctx2.stroke();
+    }
+  }
+
+  // Zoom scrollbar — only shown when zoomed in
+  if (viewStart > 0.001 || viewEnd < 0.999) {
+    const bH = 4, bY = H - bH - 1;
+    ctx2.fillStyle = 'rgba(74,48,16,0.12)';
+    ctx2.fillRect(0, bY, W, bH);
+    ctx2.fillStyle = 'rgba(208,128,16,0.65)';
+    ctx2.fillRect(viewStart * W, bY, (viewEnd - viewStart) * W, bH);
   }
 }
 
-// Canvas drag selection
+// Canvas: pinch-to-zoom (2 fingers) + drag selection (1 finger)
 canvas.addEventListener('pointerdown', e => {
   if (!waveBuffer) return;
   e.preventDefault();
-  canvas.setPointerCapture(e.pointerId);
-  isDragging = true;
   const r = canvas.getBoundingClientRect();
-  selA = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
-  selB = selA;
-  drawWave();
+  activePointers.set(e.pointerId, {x: e.clientX, y: e.clientY});
+
+  if (activePointers.size === 1) {
+    // Single finger — start selection drag
+    isDragging = true;
+    const buf = canvasToBuf(e.clientX - r.left, r.width);
+    selA = Math.max(0, Math.min(1, buf));
+    selB = selA;
+    drawWave();
+  } else if (activePointers.size === 2) {
+    // Second finger — switch to pinch zoom, cancel selection drag
+    isDragging = false;
+    const pts = [...activePointers.values()];
+    pinchStartDist   = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+    pinchStartView   = {start: viewStart, end: viewEnd};
+    const midX       = (pts[0].x + pts[1].x) / 2 - r.left;
+    pinchCenterRatio = Math.max(0, Math.min(1, canvasToBuf(midX, r.width)));
+  }
 }, {passive: false});
 
 canvas.addEventListener('pointermove', e => {
-  if (!isDragging) return;
+  if (!activePointers.has(e.pointerId)) return;
+  activePointers.set(e.pointerId, {x: e.clientX, y: e.clientY});
   const r = canvas.getBoundingClientRect();
-  selB = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
-  drawWave();
-}, {passive: true});
 
-canvas.addEventListener('pointerup', () => {
-  isDragging = false;
-  const span = Math.abs(selB - selA);
-  if (span > 0.001 && waveBuffer) {
-    const dur = waveBuffer.duration * span;
-    waveHint.textContent = `선택: ${dur.toFixed(2)}s → CHOP 버튼 누르기`;
-    chopBtn.disabled = false;
+  if (activePointers.size >= 2 && pinchStartView) {
+    // ── Pinch zoom ──
+    const pts = [...activePointers.values()];
+    const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+    if (dist < 1) return;
+
+    const initLen = pinchStartView.end - pinchStartView.start;
+    const newLen  = Math.min(1, Math.max(0.01, initLen * (pinchStartDist / dist)));
+
+    // Keep pinchCenterRatio under the pinch midpoint
+    const centerFrac = (pinchCenterRatio - pinchStartView.start) / initLen;
+    let newStart = pinchCenterRatio - centerFrac * newLen;
+    let newEnd   = newStart + newLen;
+
+    if (newStart < 0) { newStart = 0; newEnd = newLen; }
+    if (newEnd   > 1) { newEnd = 1;   newStart = Math.max(0, 1 - newLen); }
+
+    viewStart = newStart;
+    viewEnd   = newEnd;
+    drawWave();
+  } else if (isDragging && activePointers.size === 1) {
+    // ── Drag selection ──
+    selB = Math.max(0, Math.min(1, canvasToBuf(e.clientX - r.left, r.width)));
+    drawWave();
   }
 }, {passive: true});
 
-canvas.addEventListener('pointercancel', () => { isDragging = false; }, {passive: true});
+canvas.addEventListener('pointerup', e => {
+  activePointers.delete(e.pointerId);
+
+  if (activePointers.size === 0) {
+    // All fingers lifted
+    pinchStartView = null;
+    if (isDragging) {
+      isDragging = false;
+      const span = Math.abs(selB - selA);
+      if (span > 0.001 && waveBuffer) {
+        const dur = waveBuffer.duration * span;
+        waveHint.textContent = `선택: ${dur.toFixed(2)}s (${(viewEnd-viewStart<0.999?'확대됨':'전체')}) → CHOP`;
+        chopBtn.disabled = false;
+      }
+    }
+  } else if (activePointers.size === 1) {
+    // One finger remains — end pinch, don't start new selection yet
+    pinchStartView = null;
+    isDragging = false;
+  }
+}, {passive: true});
+
+canvas.addEventListener('pointercancel', e => {
+  activePointers.delete(e.pointerId);
+  if (activePointers.size === 0) { isDragging = false; pinchStartView = null; }
+}, {passive: true});
 
 // ─── Recording ────────────────────────────────────────────────────────────────
 const recBtn = document.getElementById('recBtn');
@@ -815,7 +889,7 @@ recBtn.addEventListener('pointerdown', async e => {
       const ab = await blob.arrayBuffer();
       try {
         waveBuffer = await decodeAudio(ab);
-        selA = 0; selB = 1;
+        selA = 0; selB = 1; viewStart = 0; viewEnd = 1;
         resizeCanvas();
         updateWaveInfo();
         chopBtn.disabled = false;
