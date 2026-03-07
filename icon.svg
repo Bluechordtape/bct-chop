@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="80" fill="#ddd5c8"/>
+  <!-- waveform shape -->
+  <path d="M40,256 L60,256 L70,180 L80,330 L95,200 L110,310 L125,150 L140,360 L155,190 L170,320 L185,230 L200,280 L215,170 L230,340 L245,210 L260,300 L275,160 L290,350 L305,220 L320,290 L335,180 L350,330 L365,240 L380,270 L395,200 L410,310 L425,230 L440,280 L460,256 L472,256"
+        stroke="#d08010" stroke-width="14" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- waveform fill -->
+  <path d="M40,256 L60,256 L70,180 L80,330 L95,200 L110,310 L125,150 L140,360 L155,190 L170,320 L185,230 L200,280 L215,170 L230,340 L245,210 L260,300 L275,160 L290,350 L305,220 L320,290 L335,180 L350,330 L365,240 L380,270 L395,200 L410,310 L425,230 L440,280 L460,256 L472,256
+        L472,256 L460,256 L440,280 L425,282 L410,312 L395,312 L380,274 L365,272 L350,334 L335,334 L320,294 L305,278 L290,354 L275,354 L260,304 L245,298 L230,344 L215,344 L200,284 L185,278 L170,324 L155,322 L140,364 L125,364 L110,314 L95,314 L80,334 L70,332 L60,256 L40,256 Z"
+        fill="rgba(208,128,16,0.25)"/>
+  <!-- selection region -->
+  <rect x="220" y="140" width="130" height="232" rx="4" fill="rgba(255,255,255,0.28)"/>
+  <line x1="220" y1="140" x2="220" y2="372" stroke="white" stroke-width="4" stroke-linecap="round"/>
+  <line x1="350" y1="140" x2="350" y2="372" stroke="white" stroke-width="4" stroke-linecap="round"/>
+  <!-- label -->
+  <text x="256" y="430" text-anchor="middle" font-family="'Courier New',monospace" font-size="68" font-weight="bold" fill="#4a3010" letter-spacing="2">BCT-CHOP</text>
+</svg>

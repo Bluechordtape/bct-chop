@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#ede7db">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>BCT-CHOP</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #ede7db;
+  --machine: #ddd5c8;
+  --border: #c4b499;
+  --text: #2a1a08;
+  --amber: #d08010;
+  --cream: #f0e8d8;
+  --g: 5px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bot: env(safe-area-inset-bottom, 0px);
+}
+
+html { height: 100%; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Courier New', monospace;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: calc(var(--safe-top) + 4px) var(--g) calc(var(--safe-bot) + 4px);
+  -webkit-user-select: none;
+  user-select: none;
+  overflow-y: auto;
+}
+
+.machine {
+  background: linear-gradient(160deg, #eae2d6 0%, #ddd5c8 100%);
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 580px;
+  gap: 5px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.7);
+}
+
+/* ── Header ── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  padding: 0 2px;
+}
+
+.logo {
+  font-size: clamp(17px, 4.5vw, 26px);
+  font-weight: bold;
+  color: var(--amber);
+  letter-spacing: 3px;
+  text-shadow: 1px 1px 0 rgba(0,0,0,0.08);
+}
+
+.logo-sub {
+  font-size: 8px;
+  color: #a07840;
+  letter-spacing: 2px;
+  display: block;
+  margin-top: -2px;
+}
+
+.rec-controls { display: flex; gap: 5px; align-items: center; }
+
+.btn {
+  font-family: 'Courier New', monospace;
+  cursor: pointer;
+  border: 1.5px solid;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.btn-rec {
+  background: #c8b8a8;
+  border-color: #a09080;
+  color: #4a3010;
+  padding: 6px 11px;
+  user-select: none;
+}
+
+.btn-rec.recording {
+  background: #d83020;
+  color: #fff;
+  border-color: #b02010;
+  animation: blink 0.6s ease-in-out infinite;
+}
+
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.65} }
+
+.upload-label {
+  background: #c8b8a8;
+  border: 1.5px solid #a09080;
+  border-radius: 6px;
+  color: #4a3010;
+  padding: 6px 11px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.upload-label input { display: none; }
+
+/* ── Waveform ── */
+.wave-section {
+  background: #e0d8cc;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 5px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#waveCanvas {
+  width: 100%;
+  height: 88px;
+  border-radius: 5px;
+  display: block;
+  cursor: crosshair;
+  touch-action: none;
+  -webkit-touch-callout: none;
+}
+
+.wave-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.wave-hint {
+  font-size: 9px;
+  color: rgba(74,48,16,0.45);
+  letter-spacing: 0.5px;
+}
+
+.wave-info {
+  font-size: 9px;
+  color: rgba(74,48,16,0.55);
+  letter-spacing: 0.5px;
+}
+
+.btn-chop {
+  background: var(--amber);
+  border-color: #a06008;
+  color: #fff;
+  padding: 5px 18px;
+  font-size: 12px;
+}
+
+.btn-chop:disabled {
+  background: #bfb4a4;
+  border-color: #a09080;
+  color: rgba(74,48,16,0.35);
+  cursor: not-allowed;
+}
+
+/* ── Pad grid ── */
+.pad-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.pad {
+  aspect-ratio: 1;
+  background: #c0b0a0;
+  border: 1.5px solid #a09080;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.28);
+  transition: filter 0.06s, transform 0.06s;
+}
+
+.pad.filled {
+  border-color: rgba(0,0,0,0.18);
+  box-shadow: 0 3px 6px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.35);
+}
+
+.pad.active {
+  filter: brightness(1.35);
+  transform: scale(0.94);
+}
+
+.pad-num {
+  font-size: 8px;
+  position: absolute;
+  top: 4px;
+  left: 5px;
+  color: rgba(255,255,255,0.55);
+  font-weight: bold;
+}
+
+.pad-name {
+  font-size: clamp(8px, 2.2vw, 11px);
+  font-weight: bold;
+  color: rgba(255,255,255,0.95);
+  text-align: center;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.45);
+  padding: 2px 3px;
+  line-height: 1.2;
+  word-break: break-all;
+}
+
+.pad-empty-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(74,48,16,0.2);
+}
+
+@media (hover: hover) {
+  .pad:hover { filter: brightness(1.08); }
+  .pad.filled:hover { filter: brightness(1.12); }
+}
+
+/* ── Loop section ── */
+.loop-section {
+  background: #e0d8cc;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 6px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.section-lbl {
+  font-size: 8px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  color: #9a7040;
+  flex-shrink: 0;
+}
+
+.loop-btns {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+.loop-btn {
+  background: #c8b8a8;
+  border: 1.5px solid #a09080;
+  border-radius: 5px;
+  color: #4a3010;
+  padding: 5px 3px;
+  font-family: 'Courier New', monospace;
+  font-size: clamp(7px, 1.9vw, 9px);
+  font-weight: bold;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  touch-action: manipulation;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.loop-btn.active {
+  background: var(--amber);
+  border-color: #a06008;
+  color: #fff;
+}
+
+.loop-controls {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.btn-play {
+  background: #4a8040;
+  border-color: #306020;
+  color: #fff;
+  padding: 6px 13px;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.btn-play.playing {
+  background: #c04020;
+  border-color: #a02810;
+}
+
+.ctrl-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+}
+
+.lbl {
+  font-size: 8px;
+  font-weight: bold;
+  color: #9a7040;
+  white-space: nowrap;
+  letter-spacing: 1px;
+  flex-shrink: 0;
+}
+
+input[type=range] {
+  -webkit-appearance: none;
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--amber) var(--pct,50%), #c0b0a0 var(--pct,50%));
+  outline: none;
+  cursor: pointer;
+  min-width: 0;
+}
+
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--amber);
+  border: 2px solid #a06008;
+  cursor: pointer;
+}
+
+.bpm-val {
+  font-size: 13px;
+  font-weight: bold;
+  color: #4a3010;
+  min-width: 26px;
+  text-align: right;
+  cursor: ns-resize;
+  touch-action: none;
+  border-bottom: 1.5px dashed rgba(74,48,16,0.3);
+  padding-bottom: 1px;
+  flex-shrink: 0;
+}
+
+.vol-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+  min-width: 100px;
+}
+
+/* ── Modal ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.52);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 20px;
+}
+
+.modal-overlay.hidden { display: none; }
+
+.modal-box {
+  background: #ddd5c8;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  width: 100%;
+  max-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.28);
+}
+
+.modal-title {
+  font-size: 12px;
+  font-weight: bold;
+  color: var(--amber);
+  letter-spacing: 2px;
+  text-align: center;
+}
+
+.modal-input {
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  padding: 7px 9px;
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  background: #f0e8d8;
+  color: var(--text);
+  outline: none;
+  width: 100%;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.modal-btns { display: flex; gap: 6px; }
+
+.btn-rename { background: #5080d0; border-color: #3060b0; color: #fff; flex:1; padding: 7px; border-radius: 6px; font-size: 11px; }
+.btn-delete { background: #c84030; border-color: #a02818; color: #fff; flex:1; padding: 7px; border-radius: 6px; font-size: 11px; }
+.btn-cancel { background: #c8b8a8; border-color: #a09080; color: #4a3010; flex:1; padding: 7px; border-radius: 6px; font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="machine">
+
+  <!-- Header -->
+  <div class="header">
+    <div>
+      <span class="logo">BCT-CHOP</span>
+      <span class="logo-sub">SAMPLE CHOPPER</span>
+    </div>
+    <div class="rec-controls">
+      <button id="recBtn" class="btn btn-rec">● REC</button>
+      <label class="upload-label">↑ LOAD<input type="file" id="fileIn" accept="audio/*"></label>
+    </div>
+  </div>
+
+  <!-- Waveform -->
+  <div class="wave-section">
+    <canvas id="waveCanvas"></canvas>
+    <div class="wave-footer">
+      <span class="wave-hint" id="waveHint">REC 또는 파일 업로드 후 드래그로 구간 선택</span>
+      <span class="wave-info" id="waveInfo"></span>
+      <button id="chopBtn" class="btn btn-chop" disabled>CHOP</button>
+    </div>
+  </div>
+
+  <!-- 4×4 Pad grid -->
+  <div class="pad-grid" id="padGrid"></div>
+
+  <!-- Drum loop section -->
+  <div class="loop-section">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1px">
+      <span class="section-lbl">DRUM LOOP</span>
+    </div>
+    <div class="loop-btns" id="loopBtns"></div>
+    <div class="loop-controls">
+      <button id="playBtn" class="btn btn-play">▶ PLAY</button>
+      <div class="ctrl-row">
+        <span class="lbl">BPM</span>
+        <input type="range" id="bpmSlider" min="60" max="180" value="90" step="1">
+        <span class="bpm-val" id="bpmVal">90</span>
+      </div>
+    </div>
+    <div class="loop-controls" style="margin-top:-1px">
+      <div class="vol-row">
+        <span class="lbl">LOOP</span>
+        <input type="range" id="loopVolSlider" min="0" max="100" value="70">
+      </div>
+      <div class="vol-row">
+        <span class="lbl">SMPL</span>
+        <input type="range" id="smplVolSlider" min="0" max="100" value="80">
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Long-press pad modal -->
+<div class="modal-overlay hidden" id="padModal">
+  <div class="modal-box">
+    <div class="modal-title" id="modalTitle">PAD 1</div>
+    <input type="text" class="modal-input" id="renameInput" placeholder="새 이름 입력">
+    <div class="modal-btns">
+      <button class="btn btn-rename" id="renameBtn">RENAME</button>
+      <button class="btn btn-delete" id="deleteBtn">DELETE</button>
+      <button class="btn btn-cancel" id="cancelBtn">CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ─── Audio Context ─────────────────────────────────────────────────────────────
+const AC = window.AudioContext || window.webkitAudioContext;
+let ctx = null, masterOut = null, loopGainNode = null, smplGainNode = null;
+
+function boot() {
+  if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
+  ctx = new AC();
+  masterOut   = ctx.createGain(); masterOut.gain.value = 1;
+  loopGainNode = ctx.createGain(); loopGainNode.gain.value = +loopVolSlider.value / 100;
+  smplGainNode = ctx.createGain(); smplGainNode.gain.value = +smplVolSlider.value / 100;
+  loopGainNode.connect(masterOut);
+  smplGainNode.connect(masterOut);
+  masterOut.connect(ctx.destination);
+}
+
+function decodeAudio(ab) {
+  return new Promise((res, rej) => ctx.decodeAudioData(ab, res, rej));
+}
+
+// ─── Pad data ──────────────────────────────────────────────────────────────────
+const PAD_COLORS = [
+  '#e87040','#5080d0','#50b080','#d0a020','#d05080','#8060c0',
+  '#40a0b0','#c06030','#60a848','#d06880','#4070c0','#b06040',
+  '#8068c0','#c08840','#3898a0','#a85068'
+];
+
+const pads = Array.from({length:16}, () => ({buf: null, name: '', color: ''}));
+const activeSrc = new Array(16).fill(null);
+
+// ─── Build Pad DOM ─────────────────────────────────────────────────────────────
+const padGrid = document.getElementById('padGrid');
+
+function buildPads() {
+  for (let i = 0; i < 16; i++) {
+    const el = document.createElement('div');
+    el.className = 'pad';
+    el.dataset.i = i;
+    el.innerHTML = `<span class="pad-num">${i+1}</span><span class="pad-name"></span>`;
+    padGrid.appendChild(el);
+  }
+}
+
+function refreshPad(i) {
+  const el = padGrid.children[i];
+  const p  = pads[i];
+  el.classList.toggle('filled', !!p.buf);
+  el.style.background = p.buf ? p.color : '';
+  el.style.borderColor = '';
+  const nameEl = el.querySelector('.pad-name');
+  nameEl.textContent = p.buf ? (p.name || `S${i+1}`) : '';
+  let dot = el.querySelector('.pad-empty-dot');
+  if (!p.buf) {
+    if (!dot) { dot = document.createElement('div'); dot.className = 'pad-empty-dot'; el.appendChild(dot); }
+  } else {
+    if (dot) dot.remove();
+  }
+}
+
+function playPad(i) {
+  const p = pads[i];
+  if (!p.buf || !ctx) return;
+  if (activeSrc[i]) { try { activeSrc[i].stop(); } catch(e){} }
+  const src = ctx.createBufferSource();
+  src.buffer = p.buf;
+  src.connect(smplGainNode);
+  src.start();
+  activeSrc[i] = src;
+  const el = padGrid.children[i];
+  el.classList.add('active');
+  src.onended = () => el.classList.remove('active');
+}
+
+// ─── Pad events (tap + long-press) ────────────────────────────────────────────
+const LONG_MS = 500;
+let lpTimer = null, lpIdx = -1, lpStart = null;
+let modalIdx = -1;
+
+padGrid.addEventListener('pointerdown', e => {
+  const el = e.target.closest('.pad');
+  if (!el) return;
+  e.preventDefault();
+  const i = +el.dataset.i;
+  lpIdx   = i;
+  lpStart = {x: e.clientX, y: e.clientY};
+  lpTimer = setTimeout(() => {
+    lpTimer = null;
+    openPadModal(i);
+    lpIdx = -1; lpStart = null;
+  }, LONG_MS);
+}, {passive: false});
+
+padGrid.addEventListener('pointermove', e => {
+  if (!lpTimer || !lpStart) return;
+  const dx = e.clientX - lpStart.x, dy = e.clientY - lpStart.y;
+  if (dx*dx + dy*dy > 64) { clearTimeout(lpTimer); lpTimer = null; lpIdx = -1; lpStart = null; }
+}, {passive: true});
+
+padGrid.addEventListener('pointerup', e => {
+  if (lpTimer) {
+    clearTimeout(lpTimer); lpTimer = null;
+    const i = lpIdx; lpIdx = -1; lpStart = null;
+    if (i < 0) return;
+    boot();
+    playPad(i);
+  } else { lpIdx = -1; lpStart = null; }
+}, {passive: true});
+
+padGrid.addEventListener('pointercancel', () => {
+  clearTimeout(lpTimer); lpTimer = null; lpIdx = -1; lpStart = null;
+}, {passive: true});
+
+// ─── Pad modal ─────────────────────────────────────────────────────────────────
+const padModal   = document.getElementById('padModal');
+const modalTitle = document.getElementById('modalTitle');
+const renameInput = document.getElementById('renameInput');
+
+function openPadModal(i) {
+  if (!pads[i].buf) return;
+  modalIdx = i;
+  modalTitle.textContent = `── PAD ${i+1} ──`;
+  renameInput.value = pads[i].name || `S${i+1}`;
+  padModal.classList.remove('hidden');
+  setTimeout(() => renameInput.focus(), 80);
+}
+
+function closePadModal() { padModal.classList.add('hidden'); modalIdx = -1; }
+
+document.getElementById('renameBtn').addEventListener('click', () => {
+  if (modalIdx < 0) return;
+  const v = renameInput.value.trim();
+  if (v) pads[modalIdx].name = v;
+  refreshPad(modalIdx);
+  closePadModal();
+});
+
+document.getElementById('deleteBtn').addEventListener('click', () => {
+  if (modalIdx < 0) return;
+  if (activeSrc[modalIdx]) { try { activeSrc[modalIdx].stop(); } catch(e){} activeSrc[modalIdx] = null; }
+  pads[modalIdx] = {buf: null, name: '', color: ''};
+  refreshPad(modalIdx);
+  closePadModal();
+});
+
+document.getElementById('cancelBtn').addEventListener('click', closePadModal);
+padModal.addEventListener('click', e => { if (e.target === padModal) closePadModal(); });
+
+// ─── Waveform Canvas ───────────────────────────────────────────────────────────
+const canvas  = document.getElementById('waveCanvas');
+const ctx2    = canvas.getContext('2d');
+const waveHint = document.getElementById('waveHint');
+const waveInfo = document.getElementById('waveInfo');
+const chopBtn  = document.getElementById('chopBtn');
+
+let waveBuffer = null;
+let selA = -1, selB = -1;   // selection in 0..1 (raw drag points)
+let isDragging = false;
+
+function resizeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.offsetWidth, h = canvas.offsetHeight;
+  canvas.width  = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
+  ctx2.setTransform(dpr, 0, 0, dpr, 0, 0);
+  drawWave();
+}
+
+function drawWave() {
+  const W = canvas.offsetWidth, H = canvas.offsetHeight;
+  ctx2.clearRect(0, 0, W, H);
+
+  // Background
+  ctx2.fillStyle = '#c8bfb0';
+  ctx2.beginPath();
+  ctx2.roundRect(0, 0, W, H, 5);
+  ctx2.fill();
+
+  if (!waveBuffer) {
+    ctx2.fillStyle = 'rgba(74,48,16,0.28)';
+    ctx2.font = `bold 11px "Courier New"`;
+    ctx2.textAlign = 'center';
+    ctx2.textBaseline = 'middle';
+    ctx2.fillText('REC 또는 파일 업로드', W/2, H/2);
+    return;
+  }
+
+  // Waveform data (ch 0)
+  const data = waveBuffer.getChannelData(0);
+  const step = Math.max(1, Math.floor(data.length / W));
+
+  // Draw waveform body
+  ctx2.beginPath();
+  const mid = H / 2;
+  ctx2.moveTo(0, mid);
+  for (let x = 0; x < W; x++) {
+    let peak = 0;
+    const off = x * step;
+    for (let j = 0; j < step; j++) {
+      const v = data[off + j];
+      if (v !== undefined && Math.abs(v) > peak) peak = Math.abs(v);
+    }
+    ctx2.lineTo(x, mid - peak * mid * 0.88);
+  }
+  for (let x = W - 1; x >= 0; x--) {
+    let peak = 0;
+    const off = x * step;
+    for (let j = 0; j < step; j++) {
+      const v = data[off + j];
+      if (v !== undefined && Math.abs(v) > peak) peak = Math.abs(v);
+    }
+    ctx2.lineTo(x, mid + peak * mid * 0.88);
+  }
+  ctx2.closePath();
+  const grad = ctx2.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0,   '#e87830');
+  grad.addColorStop(0.5, '#d08010');
+  grad.addColorStop(1,   '#e87830');
+  ctx2.fillStyle = grad;
+  ctx2.fill();
+
+  // Center line
+  ctx2.strokeStyle = 'rgba(74,48,16,0.15)';
+  ctx2.lineWidth = 0.5;
+  ctx2.beginPath(); ctx2.moveTo(0, mid); ctx2.lineTo(W, mid); ctx2.stroke();
+
+  // Selection overlay
+  if (selA >= 0 && selB >= 0 && Math.abs(selB - selA) > 0.001) {
+    const sx = Math.min(selA, selB) * W;
+    const ex = Math.max(selA, selB) * W;
+    ctx2.fillStyle = 'rgba(255,255,255,0.22)';
+    ctx2.fillRect(sx, 0, ex - sx, H);
+    ctx2.strokeStyle = '#fff';
+    ctx2.lineWidth = 1.5;
+    ctx2.beginPath();
+    ctx2.moveTo(sx, 0); ctx2.lineTo(sx, H);
+    ctx2.moveTo(ex, 0); ctx2.lineTo(ex, H);
+    ctx2.stroke();
+  }
+}
+
+// Canvas drag selection
+canvas.addEventListener('pointerdown', e => {
+  if (!waveBuffer) return;
+  e.preventDefault();
+  canvas.setPointerCapture(e.pointerId);
+  isDragging = true;
+  const r = canvas.getBoundingClientRect();
+  selA = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+  selB = selA;
+  drawWave();
+}, {passive: false});
+
+canvas.addEventListener('pointermove', e => {
+  if (!isDragging) return;
+  const r = canvas.getBoundingClientRect();
+  selB = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+  drawWave();
+}, {passive: true});
+
+canvas.addEventListener('pointerup', () => {
+  isDragging = false;
+  const span = Math.abs(selB - selA);
+  if (span > 0.001 && waveBuffer) {
+    const dur = waveBuffer.duration * span;
+    waveHint.textContent = `선택: ${dur.toFixed(2)}s → CHOP 버튼 누르기`;
+    chopBtn.disabled = false;
+  }
+}, {passive: true});
+
+canvas.addEventListener('pointercancel', () => { isDragging = false; }, {passive: true});
+
+// ─── Recording ────────────────────────────────────────────────────────────────
+const recBtn = document.getElementById('recBtn');
+let mediaRecorder = null, recChunks = [], isRecording = false;
+
+function getMimeType() {
+  const types = ['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg'];
+  return types.find(t => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
+}
+
+recBtn.addEventListener('pointerdown', async e => {
+  e.preventDefault();
+  if (isRecording) return;
+  boot();
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({audio: true, video: false});
+    recChunks = [];
+    const mime = getMimeType();
+    mediaRecorder = new MediaRecorder(stream, mime ? {mimeType: mime} : {});
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recChunks.push(e.data); };
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(recChunks, {type: mime || 'audio/webm'});
+      const ab = await blob.arrayBuffer();
+      try {
+        waveBuffer = await decodeAudio(ab);
+        selA = 0; selB = 1;
+        resizeCanvas();
+        updateWaveInfo();
+        chopBtn.disabled = false;
+        waveHint.textContent = '드래그로 구간 선택 후 CHOP';
+      } catch(err) { alert('오디오 디코딩 실패: ' + err.message); }
+    };
+    mediaRecorder.start(100);
+    isRecording = true;
+    recBtn.classList.add('recording');
+    recBtn.textContent = '■ STOP';
+  } catch(err) {
+    alert('마이크 접근 불가: ' + (err.message || err));
+  }
+}, {passive: false});
+
+function stopRecording() {
+  if (!isRecording || !mediaRecorder) return;
+  mediaRecorder.stop();
+  isRecording = false;
+  recBtn.classList.remove('recording');
+  recBtn.textContent = '● REC';
+}
+
+recBtn.addEventListener('pointerup',     stopRecording, {passive: true});
+recBtn.addEventListener('pointercancel', stopRecording, {passive: true});
+
+// ─── File Upload ───────────────────────────────────────────────────────────────
+document.getElementById('fileIn').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  boot();
+  const ab = await file.arrayBuffer();
+  try {
+    waveBuffer = await decodeAudio(ab);
+    selA = 0; selB = 1;
+    resizeCanvas();
+    updateWaveInfo();
+    chopBtn.disabled = false;
+    waveHint.textContent = '드래그로 구간 선택 후 CHOP';
+  } catch(err) { alert('파일 디코딩 실패: ' + err.message); }
+  e.target.value = '';
+});
+
+function updateWaveInfo() {
+  if (!waveBuffer) { waveInfo.textContent = ''; return; }
+  waveInfo.textContent = `${waveBuffer.duration.toFixed(1)}s`;
+}
+
+// ─── Chop ──────────────────────────────────────────────────────────────────────
+function sliceBuffer(buf, s, e) {
+  const start = Math.floor(s * buf.length);
+  const end   = Math.ceil(e  * buf.length);
+  const len   = Math.max(1, end - start);
+  const out   = ctx.createBuffer(buf.numberOfChannels, len, buf.sampleRate);
+  for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+    const src = new Float32Array(buf.getChannelData(ch).buffer, start * 4, len);
+    out.copyToChannel(src, ch);
+  }
+  return out;
+}
+
+chopBtn.addEventListener('click', () => {
+  if (!waveBuffer || selA < 0) return;
+  const s = Math.min(selA, selB), e = Math.max(selA, selB);
+  if (e - s < 0.001) { alert('구간을 더 크게 선택하세요'); return; }
+  boot();
+  const sliced = sliceBuffer(waveBuffer, s, e);
+
+  // Count assigned chops for naming
+  const chopCount = pads.filter(p => p.buf).length + 1;
+  const idx = pads.findIndex(p => !p.buf);
+  if (idx === -1) { alert('패드가 꽉 찼습니다 (16/16)'); return; }
+
+  pads[idx].buf   = sliced;
+  pads[idx].name  = `C${chopCount}`;
+  pads[idx].color = PAD_COLORS[idx % PAD_COLORS.length];
+  refreshPad(idx);
+
+  // Flash the assigned pad
+  const el = padGrid.children[idx];
+  el.classList.add('active');
+  setTimeout(() => el.classList.remove('active'), 180);
+
+  waveHint.textContent = `PAD ${idx+1}에 할당됨 → 다시 선택하거나 CHOP 반복`;
+});
+
+// ─── Drum Loop Patterns ────────────────────────────────────────────────────────
+const LOOPS = [
+  {name:'Boom Bap',    k:'1000100010000000', s:'0000100000001000', h:'0010001000100010', o:'0000000000000001'},
+  {name:'Lo-fi Chill', k:'1000001000000010', s:'0000100100001000', h:'1010100010101001', o:'0000000000000100'},
+  {name:'Trap',        k:'1001000010010001', s:'0000100000001000', h:'1111111111111111', o:'0000000000010000'},
+  {name:'Jazz Hop',    k:'1000000100100000', s:'0000100010001001', h:'1010010110100101', o:'0000000100000000'},
+  {name:'Funk Break',  k:'1000101110001001', s:'0000100100001001', h:'0101011001010110', o:'0000000000010001'},
+  {name:'Soul Groove', k:'1000000010001000', s:'0000100000001001', h:'1010101010101010', o:'0000100000001000'},
+  {name:'Dusty Vinyl', k:'1000100000100001', s:'0000100000001010', h:'1010010110100101', o:'0000000000010010'},
+  {name:'Hard Knock',  k:'1000110010001100', s:'0000100000001000', h:'1100110011001100', o:'0000000100000001'},
+];
+
+let currentLoop = 0, loopPlaying = false, loopStep = 0;
+let nextNoteTime = 0, schedTimer = null;
+let bpm = 90;
+
+// ─── Build Loop Buttons ────────────────────────────────────────────────────────
+const loopBtns = document.getElementById('loopBtns');
+
+function buildLoopBtns() {
+  LOOPS.forEach((lp, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'loop-btn' + (i === 0 ? ' active' : '');
+    btn.textContent = lp.name;
+    btn.addEventListener('click', () => {
+      currentLoop = i;
+      loopStep = 0;
+      document.querySelectorAll('.loop-btn').forEach((b, j) => b.classList.toggle('active', j === i));
+    });
+    loopBtns.appendChild(btn);
+  });
+}
+
+// ─── Drum Synth ────────────────────────────────────────────────────────────────
+function mkNoise(dur) {
+  const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d   = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  const s = ctx.createBufferSource(); s.buffer = buf;
+  return s;
+}
+
+function playLoopDrum(type, when) {
+  if (!ctx || !loopGainNode) return;
+  const t = when;
+
+  if (type === 'k') {
+    const body  = ctx.createOscillator(); body.type = 'sine';
+    const click = ctx.createOscillator(); click.type = 'triangle';
+    body.frequency.setValueAtTime(160, t);
+    body.frequency.exponentialRampToValueAtTime(40, t + 0.14);
+    click.frequency.setValueAtTime(1400, t);
+    click.frequency.exponentialRampToValueAtTime(60, t + 0.03);
+    const bg = ctx.createGain(), cg = ctx.createGain();
+    bg.gain.setValueAtTime(0.9, t); bg.gain.exponentialRampToValueAtTime(0.001, t + 0.38);
+    cg.gain.setValueAtTime(0.35, t); cg.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+    body.connect(bg); bg.connect(loopGainNode);
+    click.connect(cg); cg.connect(loopGainNode);
+    body.start(t); body.stop(t + 0.4);
+    click.start(t); click.stop(t + 0.05);
+  }
+
+  if (type === 's') {
+    const noise = mkNoise(0.22), body = ctx.createOscillator(); body.type = 'triangle';
+    const bpf   = ctx.createBiquadFilter(); bpf.type = 'bandpass'; bpf.frequency.value = 3200; bpf.Q.value = 0.55;
+    body.frequency.setValueAtTime(260, t); body.frequency.exponentialRampToValueAtTime(100, t + 0.08);
+    const eg = ctx.createGain(), bg = ctx.createGain();
+    eg.gain.setValueAtTime(0.75, t); eg.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+    bg.gain.setValueAtTime(0.45, t); bg.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+    noise.connect(bpf); bpf.connect(eg); eg.connect(loopGainNode);
+    body.connect(bg); bg.connect(loopGainNode);
+    noise.start(t); noise.stop(t + 0.22);
+    body.start(t); body.stop(t + 0.1);
+  }
+
+  if (type === 'h') {
+    const noise = mkNoise(0.07);
+    const hpf = ctx.createBiquadFilter(); hpf.type = 'highpass'; hpf.frequency.value = 9500;
+    const eg  = ctx.createGain();
+    eg.gain.setValueAtTime(0.38, t); eg.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+    noise.connect(hpf); hpf.connect(eg); eg.connect(loopGainNode);
+    noise.start(t); noise.stop(t + 0.08);
+  }
+
+  if (type === 'o') {
+    const noise = mkNoise(0.4);
+    const hpf = ctx.createBiquadFilter(); hpf.type = 'highpass'; hpf.frequency.value = 7500;
+    const eg  = ctx.createGain();
+    eg.gain.setValueAtTime(0.45, t); eg.gain.exponentialRampToValueAtTime(0.001, t + 0.38);
+    noise.connect(hpf); hpf.connect(eg); eg.connect(loopGainNode);
+    noise.start(t); noise.stop(t + 0.4);
+  }
+}
+
+// ─── Scheduler ────────────────────────────────────────────────────────────────
+function scheduler() {
+  while (nextNoteTime < ctx.currentTime + 0.12) {
+    const step = loopStep % 16;
+    const pat  = LOOPS[currentLoop];
+    const sixteenth = 60 / bpm / 4;
+    if (pat.k[step] === '1') playLoopDrum('k', nextNoteTime);
+    if (pat.s[step] === '1') playLoopDrum('s', nextNoteTime);
+    if (pat.h[step] === '1') playLoopDrum('h', nextNoteTime);
+    if (pat.o[step] === '1') playLoopDrum('o', nextNoteTime);
+    nextNoteTime += sixteenth;
+    loopStep++;
+  }
+  schedTimer = setTimeout(scheduler, 22);
+}
+
+function startLoop() {
+  boot();
+  loopStep = 0;
+  nextNoteTime = ctx.currentTime + 0.04;
+  scheduler();
+  loopPlaying = true;
+  playBtn.textContent = '■ STOP';
+  playBtn.classList.add('playing');
+}
+
+function stopLoop() {
+  clearTimeout(schedTimer); schedTimer = null;
+  loopPlaying = false;
+  playBtn.textContent = '▶ PLAY';
+  playBtn.classList.remove('playing');
+}
+
+const playBtn = document.getElementById('playBtn');
+playBtn.addEventListener('click', () => loopPlaying ? stopLoop() : startLoop());
+
+// ─── Sliders ──────────────────────────────────────────────────────────────────
+function syncSlider(el, min, max) {
+  const pct = ((+el.value - min) / (max - min) * 100).toFixed(1) + '%';
+  el.style.setProperty('--pct', pct);
+}
+
+const bpmSlider    = document.getElementById('bpmSlider');
+const bpmValEl     = document.getElementById('bpmVal');
+const loopVolSlider = document.getElementById('loopVolSlider');
+const smplVolSlider = document.getElementById('smplVolSlider');
+
+bpmSlider.addEventListener('input', () => {
+  bpm = +bpmSlider.value;
+  bpmValEl.textContent = bpm;
+  syncSlider(bpmSlider, 60, 180);
+});
+syncSlider(bpmSlider, 60, 180);
+
+// BPM drag
+let bpmDragY = null, bpmDragVal = 0;
+bpmValEl.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  bpmDragY   = e.clientY;
+  bpmDragVal = bpm;
+  bpmValEl.setPointerCapture(e.pointerId);
+}, {passive: false});
+bpmValEl.addEventListener('pointermove', e => {
+  if (bpmDragY === null) return;
+  bpm = Math.max(60, Math.min(180, bpmDragVal + Math.round((bpmDragY - e.clientY) / 2.5)));
+  bpmSlider.value = bpm; bpmValEl.textContent = bpm;
+  syncSlider(bpmSlider, 60, 180);
+});
+bpmValEl.addEventListener('pointerup',     () => { bpmDragY = null; });
+bpmValEl.addEventListener('pointercancel', () => { bpmDragY = null; });
+bpmValEl.addEventListener('wheel', e => {
+  e.preventDefault();
+  bpm = Math.max(60, Math.min(180, bpm + (e.deltaY < 0 ? 1 : -1)));
+  bpmSlider.value = bpm; bpmValEl.textContent = bpm;
+  syncSlider(bpmSlider, 60, 180);
+}, {passive: false});
+
+loopVolSlider.addEventListener('input', () => {
+  if (loopGainNode) loopGainNode.gain.value = +loopVolSlider.value / 100;
+  syncSlider(loopVolSlider, 0, 100);
+});
+syncSlider(loopVolSlider, 0, 100);
+
+smplVolSlider.addEventListener('input', () => {
+  if (smplGainNode) smplGainNode.gain.value = +smplVolSlider.value / 100;
+  syncSlider(smplVolSlider, 0, 100);
+});
+syncSlider(smplVolSlider, 0, 100);
+
+// ─── PWA + Silent Mode ────────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && ctx && ctx.state === 'suspended') ctx.resume();
+});
+document.addEventListener('touchstart', () => {
+  if (ctx && ctx.state === 'suspended') ctx.resume();
+}, {once: true, passive: true});
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+buildPads();
+buildLoopBtns();
+for (let i = 0; i < 16; i++) refreshPad(i);
+
+window.addEventListener('resize', () => { resizeCanvas(); });
+// Initial canvas size after layout
+requestAnimationFrame(() => { requestAnimationFrame(resizeCanvas); });
+</script>
+</body>
+</html>
