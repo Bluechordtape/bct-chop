@@ -190,28 +190,45 @@ body {
 
 .wave-footer {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wave-hint-row {
+  display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .wave-hint {
   font-size: 9px;
   color: rgba(74,48,16,0.45);
   letter-spacing: 0.5px;
+  flex: 1;
+  min-width: 0;
 }
 
 .wave-info {
   font-size: 9px;
   color: rgba(74,48,16,0.55);
   letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.wave-btns {
+  display: flex;
+  gap: 6px;
 }
 
 .btn-chop {
   background: var(--amber);
   border-color: #a06008;
   color: #fff;
-  padding: 5px 18px;
+  padding: 9px 20px;
   font-size: 12px;
+  min-height: 40px;
+  flex: 1;
 }
 
 .btn-chop:disabled {
@@ -225,8 +242,10 @@ body {
   background: #6070b8;
   border-color: #404898;
   color: #fff;
-  padding: 5px 11px;
+  padding: 9px 16px;
   font-size: 11px;
+  min-height: 40px;
+  flex: 1;
 }
 .btn-prev.playing { background: #c04020; border-color: #a02810; }
 .btn-prev:disabled { background: #bfb4a4; border-color: #a09080; color: rgba(74,48,16,0.35); cursor: not-allowed; }
@@ -513,6 +532,20 @@ input[type=range]::-webkit-slider-thumb {
   flex-shrink: 0;
   line-height: 1;
 }
+
+/* ── Pad keyboard key label ── */
+.pad-key {
+  position: absolute;
+  bottom: 3px;
+  right: 5px;
+  font-size: 7px;
+  font-weight: bold;
+  color: rgba(255,255,255,0.4);
+  pointer-events: none;
+  letter-spacing: 0;
+  line-height: 1;
+}
+.pad.filled .pad-key { color: rgba(255,255,255,0.3); }
 </style>
 </head>
 <body>
@@ -542,10 +575,14 @@ input[type=range]::-webkit-slider-thumb {
   <div class="wave-section">
     <canvas id="waveCanvas"></canvas>
     <div class="wave-footer">
-      <span class="wave-hint" id="waveHint">REC 또는 파일 업로드 후 드래그로 구간 선택</span>
-      <span class="wave-info" id="waveInfo"></span>
-      <button id="prevBtn" class="btn btn-prev" disabled>▶ PRE</button>
-      <button id="chopBtn" class="btn btn-chop" disabled>CHOP</button>
+      <div class="wave-hint-row">
+        <span class="wave-hint" id="waveHint">REC 또는 파일 업로드 후 드래그로 구간 선택</span>
+        <span class="wave-info" id="waveInfo"></span>
+      </div>
+      <div class="wave-btns">
+        <button id="prevBtn" class="btn btn-prev" disabled>▶ PRE</button>
+        <button id="chopBtn" class="btn btn-chop" disabled>CHOP</button>
+      </div>
     </div>
   </div>
 
@@ -634,12 +671,14 @@ const activeSrc = new Array(16).fill(null);
 // ─── Build Pad DOM ─────────────────────────────────────────────────────────────
 const padGrid = document.getElementById('padGrid');
 
+const PAD_KEYS = ['1','2','3','4','Q','W','E','R','A','S','D','F','Z','X','C','V'];
+
 function buildPads() {
   for (let i = 0; i < 16; i++) {
     const el = document.createElement('div');
     el.className = 'pad';
     el.dataset.i = i;
-    el.innerHTML = `<span class="pad-num">${i+1}</span><span class="pad-name"></span>`;
+    el.innerHTML = `<span class="pad-num">${i+1}</span><span class="pad-name"></span><span class="pad-key">${PAD_KEYS[i]}</span>`;
     padGrid.appendChild(el);
   }
 }
@@ -1331,6 +1370,21 @@ for (let i = 0; i < 16; i++) refreshPad(i);
 window.addEventListener('resize', () => { resizeCanvas(); });
 // Initial canvas size after layout
 requestAnimationFrame(() => { requestAnimationFrame(resizeCanvas); });
+
+// ─── Keyboard Shortcuts ────────────────────────────────────────────────────────
+const KEY_TO_PAD = {
+  '1':0,'2':1,'3':2,'4':3,
+  'q':4,'w':5,'e':6,'r':7,
+  'a':8,'s':9,'d':10,'f':11,
+  'z':12,'x':13,'c':14,'v':15
+};
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  const idx = KEY_TO_PAD[e.key.toLowerCase()];
+  if (idx === undefined) return;
+  boot();
+  playPad(idx);
+});
 </script>
 </body>
 </html>
