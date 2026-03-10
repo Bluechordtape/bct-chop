@@ -6,15 +6,16 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#ede7db">
+<meta name="theme-color" content="#F9F7F4">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500&display=swap" rel="stylesheet">
 <title>BCT-CHOP</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg: #ede7db;
+  --bg: #F9F7F4;
   --machine: #ddd5c8;
   --border: #c4b499;
   --text: #2a1a08;
@@ -41,6 +42,41 @@ body {
   user-select: none;
   overflow-y: auto;
 }
+
+/* ── BCT Navigation Header ── */
+.bct-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 4px 6px;
+  flex-shrink: 0;
+  width: 100%;
+  max-width: 580px;
+}
+.bct-back {
+  font-family: 'Public Sans', sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #1a3aff;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.bct-reel-logo { display: flex; align-items: center; gap: 4px; }
+.bct-reel-c {
+  width: 11px; height: 11px;
+  border: 1.5px solid #1a3aff;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+}
+.bct-reel-c::after {
+  content: '';
+  width: 3px; height: 3px;
+  background: #1a3aff;
+  border-radius: 50%;
+}
+.bct-reel-bar { width: 8px; height: 1.5px; background: #1a3aff; }
 
 .machine {
   background: linear-gradient(160deg, #eae2d6 0%, #ddd5c8 100%);
@@ -480,6 +516,14 @@ input[type=range]::-webkit-slider-thumb {
 </style>
 </head>
 <body>
+<header class="bct-nav">
+  <a class="bct-back" href="https://bluechordtape-hub.vercel.app">← BLUE CHORD TAPE</a>
+  <div class="bct-reel-logo">
+    <div class="bct-reel-c"></div>
+    <div class="bct-reel-bar"></div>
+    <div class="bct-reel-c"></div>
+  </div>
+</header>
 <div class="machine">
 
   <!-- Header -->
