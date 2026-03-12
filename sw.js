@@ -1,4 +1,4 @@
-const CACHE = 'bct-chop-v1';
+const CACHE = 'bct-chop-v2';
 const ASSETS = ['./index.html', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', e => {
