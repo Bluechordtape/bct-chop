@@ -510,6 +510,115 @@ input[type=range]::-webkit-slider-thumb {
   line-height: 1;
 }
 .pad.filled .pad-key { color: rgba(255,255,255,0.22); }
+
+/* ── Mixer ── */
+.mixer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mix-track {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.vu-bar {
+  flex: 1;
+  height: 6px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.vu-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(to right, #1a3aff 0%, #3a5aff 70%, #60aaff 100%);
+  border-radius: 3px;
+  will-change: width;
+}
+.vu-fill.peak { background: linear-gradient(to right, #1a3aff 0%, #ff4030 100%); }
+.track-lbl {
+  font-size: 8px;
+  letter-spacing: 0.15em;
+  color: var(--muted);
+  flex-shrink: 0;
+  width: 30px;
+  text-transform: uppercase;
+}
+.mute-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  font-family: 'Public Sans', sans-serif;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  padding: 3px 7px;
+  flex-shrink: 0;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: all 0.08s;
+}
+.mute-btn.muted {
+  background: rgba(200,50,40,0.25);
+  border-color: rgba(200,50,40,0.5);
+  color: #ff6050;
+}
+.mix-rec-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.btn-mixrec {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 7px 14px;
+  font-size: 10px;
+  flex-shrink: 0;
+  transition: all 0.1s;
+  border-radius: 5px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+}
+.btn-mixrec.recording {
+  background: rgba(200,40,30,0.18);
+  border-color: rgba(200,40,30,0.45);
+  color: #ff5040;
+  animation: blink 0.9s ease-in-out infinite;
+}
+.rec-timer {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+  min-width: 42px;
+}
+.rec-timer.active { color: #ff5040; }
+.btn-wav {
+  margin-left: auto;
+  background: var(--primary);
+  border: 1px solid var(--primary);
+  color: #fff;
+  padding: 7px 16px;
+  font-size: 10px;
+  font-family: 'Public Sans', sans-serif;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-decoration: none;
+  border-radius: 5px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  transition: opacity 0.1s;
+  flex-shrink: 0;
+}
+.btn-wav:hover { opacity: 0.85; }
+.btn-wav.hidden { display: none; }
 </style>
 </head>
 <body>
@@ -567,14 +676,24 @@ input[type=range]::-webkit-slider-thumb {
         <span class="bpm-val" id="bpmVal">90</span>
       </div>
     </div>
-    <div class="loop-controls" style="margin-top:-1px">
-      <div class="vol-row">
-        <span class="lbl">LOOP</span>
-        <input type="range" id="loopVolSlider" min="0" max="100" value="70">
+    <!-- 2-Track Mixer -->
+    <div class="mixer">
+      <div class="mix-track">
+        <span class="track-lbl">LOOP</span>
+        <div class="vu-bar"><div class="vu-fill" id="vuLoop"></div></div>
+        <input type="range" id="loopVolSlider" min="0" max="100" value="70" style="flex:1;min-width:0">
+        <button class="mute-btn" id="loopMute">M</button>
       </div>
-      <div class="vol-row">
-        <span class="lbl">SMPL</span>
-        <input type="range" id="smplVolSlider" min="0" max="100" value="80">
+      <div class="mix-track">
+        <span class="track-lbl">SMPL</span>
+        <div class="vu-bar"><div class="vu-fill" id="vuSmpl"></div></div>
+        <input type="range" id="smplVolSlider" min="0" max="100" value="80" style="flex:1;min-width:0">
+        <button class="mute-btn" id="smplMute">M</button>
+      </div>
+      <div class="mix-rec-row">
+        <button class="btn btn-mixrec" id="mixRecBtn">⬤ REC MIX</button>
+        <span class="rec-timer" id="mixTimer">00:00</span>
+        <a class="btn-wav hidden" id="mixDlBtn" download="bct-mix.wav">↓ WAV</a>
       </div>
     </div>
   </div>
@@ -606,15 +725,25 @@ input[type=range]::-webkit-slider-thumb {
 // ─── Audio Context ─────────────────────────────────────────────────────────────
 const AC = window.AudioContext || window.webkitAudioContext;
 let ctx = null, masterOut = null, loopGainNode = null, smplGainNode = null;
+let loopAnalyser = null, smplAnalyser = null, streamDest = null;
 
 function boot() {
   if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
   ctx = new AC();
-  masterOut   = ctx.createGain(); masterOut.gain.value = 1;
+  masterOut    = ctx.createGain(); masterOut.gain.value = 1;
   loopGainNode = ctx.createGain(); loopGainNode.gain.value = +loopVolSlider.value / 100;
   smplGainNode = ctx.createGain(); smplGainNode.gain.value = +smplVolSlider.value / 100;
-  loopGainNode.connect(masterOut);
-  smplGainNode.connect(masterOut);
+
+  // Analysers for VU meters
+  loopAnalyser = ctx.createAnalyser(); loopAnalyser.fftSize = 512; loopAnalyser.smoothingTimeConstant = 0.5;
+  smplAnalyser = ctx.createAnalyser(); smplAnalyser.fftSize = 512; smplAnalyser.smoothingTimeConstant = 0.5;
+
+  loopGainNode.connect(loopAnalyser); loopAnalyser.connect(masterOut);
+  smplGainNode.connect(smplAnalyser); smplAnalyser.connect(masterOut);
+
+  // Stream destination for Mix Recorder
+  streamDest = ctx.createMediaStreamDestination();
+  masterOut.connect(streamDest);
   masterOut.connect(ctx.destination);
 }
 
@@ -1349,6 +1478,173 @@ document.addEventListener('keydown', e => {
   boot();
   playPad(idx);
 });
+
+// ─── VU Meters ─────────────────────────────────────────────────────────────────
+const vuLoopEl = document.getElementById('vuLoop');
+const vuSmplEl = document.getElementById('vuSmpl');
+const _vuData  = new Float32Array(512);
+
+function getLevel(analyser) {
+  if (!analyser) return 0;
+  analyser.getFloatTimeDomainData(_vuData);
+  let peak = 0;
+  for (let i = 0; i < analyser.fftSize; i++) {
+    const a = Math.abs(_vuData[i]);
+    if (a > peak) peak = a;
+  }
+  return Math.min(1, peak);
+}
+
+(function vuLoop() {
+  const ll = getLevel(loopAnalyser) * 100;
+  const sl = getLevel(smplAnalyser) * 100;
+  vuLoopEl.style.width = ll + '%';
+  vuSmplEl.style.width = sl + '%';
+  vuLoopEl.classList.toggle('peak', ll > 90);
+  vuSmplEl.classList.toggle('peak', sl > 90);
+  requestAnimationFrame(vuLoop);
+})();
+
+// ─── Mute Buttons ──────────────────────────────────────────────────────────────
+let loopMuted = false, smplMuted = false;
+let loopPreMuteVol = +loopVolSlider.value / 100;
+let smplPreMuteVol = +smplVolSlider.value / 100;
+
+document.getElementById('loopMute').addEventListener('click', () => {
+  loopMuted = !loopMuted;
+  document.getElementById('loopMute').classList.toggle('muted', loopMuted);
+  document.getElementById('loopMute').textContent = loopMuted ? 'UN' : 'M';
+  if (loopGainNode) {
+    if (loopMuted) { loopPreMuteVol = loopGainNode.gain.value; loopGainNode.gain.value = 0; }
+    else { loopGainNode.gain.value = loopPreMuteVol; }
+  }
+});
+
+document.getElementById('smplMute').addEventListener('click', () => {
+  smplMuted = !smplMuted;
+  document.getElementById('smplMute').classList.toggle('muted', smplMuted);
+  document.getElementById('smplMute').textContent = smplMuted ? 'UN' : 'M';
+  if (smplGainNode) {
+    if (smplMuted) { smplPreMuteVol = smplGainNode.gain.value; smplGainNode.gain.value = 0; }
+    else { smplGainNode.gain.value = smplPreMuteVol; }
+  }
+});
+
+// ─── WAV Encoder ───────────────────────────────────────────────────────────────
+function audioBufferToWAV(ab) {
+  const numCh = ab.numberOfChannels;
+  const sr    = ab.sampleRate;
+  const len   = ab.length;
+  const pcm   = new Int16Array(len * numCh);
+
+  for (let i = 0; i < len; i++) {
+    for (let ch = 0; ch < numCh; ch++) {
+      const s = Math.max(-1, Math.min(1, ab.getChannelData(ch)[i]));
+      pcm[i * numCh + ch] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    }
+  }
+
+  const wav = new ArrayBuffer(44 + pcm.byteLength);
+  const v   = new DataView(wav);
+  const str = (off, s) => { for (let i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i)); };
+
+  str(0,  'RIFF');  v.setUint32(4,  36 + pcm.byteLength, true);
+  str(8,  'WAVE');  str(12, 'fmt '); v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true);             // PCM
+  v.setUint16(22, numCh, true);
+  v.setUint32(24, sr, true);
+  v.setUint32(28, sr * numCh * 2, true);
+  v.setUint16(32, numCh * 2, true);
+  v.setUint16(34, 16, true);
+  str(36, 'data'); v.setUint32(40, pcm.byteLength, true);
+
+  new Int16Array(wav, 44).set(pcm);
+  return wav;
+}
+
+// ─── Mix Recorder ──────────────────────────────────────────────────────────────
+const mixRecBtn  = document.getElementById('mixRecBtn');
+const mixTimerEl = document.getElementById('mixTimer');
+const mixDlBtn   = document.getElementById('mixDlBtn');
+
+let mixRecorder = null, mixChunks = [], mixRecording = false;
+let mixTimerInterval = null, mixStartTime = 0;
+let lastWavURL = null;
+
+function getMixMime() {
+  const types = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4'];
+  return types.find(t => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
+}
+
+function startMixTimer() {
+  mixStartTime = Date.now();
+  mixTimerEl.classList.add('active');
+  mixTimerInterval = setInterval(() => {
+    const s = Math.floor((Date.now() - mixStartTime) / 1000);
+    mixTimerEl.textContent = `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+  }, 500);
+}
+
+function stopMixTimer() {
+  clearInterval(mixTimerInterval);
+  mixTimerInterval = null;
+  mixTimerEl.classList.remove('active');
+}
+
+mixRecBtn.addEventListener('click', async () => {
+  if (!mixRecording) {
+    // ── START ──
+    boot();
+    if (!streamDest) { alert('오디오 초기화 실패'); return; }
+
+    mixDlBtn.classList.add('hidden');
+    if (lastWavURL) { URL.revokeObjectURL(lastWavURL); lastWavURL = null; }
+
+    mixChunks = [];
+    const mime = getMixMime();
+    try {
+      mixRecorder = new MediaRecorder(streamDest.stream, mime ? {mimeType: mime} : {});
+    } catch(e) {
+      mixRecorder = new MediaRecorder(streamDest.stream);
+    }
+
+    mixRecorder.ondataavailable = e => { if (e.data.size > 0) mixChunks.push(e.data); };
+    mixRecorder.onstop = async () => {
+      stopMixTimer();
+      mixRecBtn.textContent = '⬤ REC MIX';
+      mixRecBtn.classList.remove('recording');
+
+      const blob = new Blob(mixChunks, {type: mime || 'audio/webm'});
+      const ab   = await blob.arrayBuffer();
+      try {
+        // Decode webm → PCM AudioBuffer → encode WAV
+        const decoded = await new Promise((res, rej) => ctx.decodeAudioData(ab, res, rej));
+        const wavBuf  = audioBufferToWAV(decoded);
+        const wavBlob = new Blob([wavBuf], {type: 'audio/wav'});
+        lastWavURL = URL.createObjectURL(wavBlob);
+        mixDlBtn.href = lastWavURL;
+        const dur = decoded.duration.toFixed(1);
+        mixDlBtn.download = `bct-mix-${dur}s.wav`;
+        mixDlBtn.classList.remove('hidden');
+        mixTimerEl.textContent = `${decoded.duration.toFixed(1)}s`;
+      } catch(err) {
+        alert('WAV 변환 실패: ' + err.message);
+      }
+    };
+
+    mixRecorder.start(100);
+    mixRecording = true;
+    mixRecBtn.textContent = '■ STOP';
+    mixRecBtn.classList.add('recording');
+    startMixTimer();
+
+  } else {
+    // ── STOP ──
+    mixRecording = false;
+    if (mixRecorder && mixRecorder.state !== 'inactive') mixRecorder.stop();
+  }
+});
+
 </script>
 </body>
 </html>
