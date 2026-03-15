@@ -619,6 +619,128 @@ input[type=range]::-webkit-slider-thumb {
 }
 .btn-wav:hover { opacity: 0.85; }
 .btn-wav.hidden { display: none; }
+
+/* ── CHOP Sheet ── */
+.chop-sheet {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.chop-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.chop-sheet-actions { display: flex; gap: 5px; align-items: center; }
+.btn-sheet-rec {
+  background: transparent;
+  border: 1px solid rgba(192,64,48,0.5);
+  color: #c04030;
+  font-size: 10px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-family: 'Public Sans', sans-serif;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  touch-action: manipulation;
+  flex-shrink: 0;
+}
+.btn-sheet-rec.recording { background: #c04030; color: #fff; border-color: #c04030; }
+.btn-sheet-view {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 10px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-family: 'Public Sans', sans-serif;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  touch-action: manipulation;
+  flex-shrink: 0;
+}
+.btn-sheet-view.active { border-color: var(--primary); color: var(--primary); }
+.chop-pad-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+.chop-pad {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  aspect-ratio: 1.4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+  overflow: hidden;
+  min-height: 44px;
+  transition: filter 0.05s;
+}
+.chop-pad.filled { border-color: transparent; }
+.chop-pad.active { filter: brightness(1.5); }
+.chop-pad-num {
+  font-size: 7px;
+  color: rgba(221,216,208,0.25);
+  position: absolute;
+  top: 3px;
+  left: 4px;
+}
+.chop-pad-key {
+  font-size: 7px;
+  color: rgba(221,216,208,0.25);
+  position: absolute;
+  bottom: 3px;
+  right: 4px;
+}
+.chop-pad-name { font-size: 10px; font-weight: 600; color: rgba(0,0,0,0.75); }
+.chop-pad-empty-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(221,216,208,0.12);
+}
+.sheet-view {
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+}
+.sheet-view.open { display: flex; }
+.sheet-canvas {
+  width: 100%;
+  height: 88px;
+  border-radius: 4px;
+  background: var(--surface);
+  display: block;
+}
+.sheet-actions { display: flex; gap: 5px; justify-content: flex-end; }
+.btn-midi-export, .btn-clear-sheet {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 9px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-family: 'Public Sans', sans-serif;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.btn-clear-sheet { border-color: rgba(192,64,48,0.3); color: rgba(192,64,48,0.7); }
 </style>
 </head>
 <body>
@@ -659,7 +781,26 @@ input[type=range]::-webkit-slider-thumb {
     </div>
   </div>
 
-  <!-- 4×4 Pad grid -->
+  <!-- CHOP Sheet -->
+  <div class="chop-sheet">
+    <div class="chop-sheet-header">
+      <span class="section-lbl">CHOP PADS</span>
+      <div class="chop-sheet-actions">
+        <button class="btn-sheet-rec" id="sheetRecBtn">● REC</button>
+        <button class="btn-sheet-view" id="sheetViewBtn">SHEET</button>
+      </div>
+    </div>
+    <div class="chop-pad-grid" id="chopPadGrid"></div>
+    <div class="sheet-view" id="sheetView">
+      <canvas class="sheet-canvas" id="sheetCanvas"></canvas>
+      <div class="sheet-actions">
+        <button class="btn-clear-sheet" id="clearSheetBtn">CLEAR</button>
+        <button class="btn-midi-export" id="midiExportBtn">↓ MIDI</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4×4 Sample Pad grid -->
   <div class="pad-grid" id="padGrid"></div>
 
   <!-- Drum loop section -->
@@ -1020,6 +1161,28 @@ function drawWave() {
     ctx2.fillStyle = 'rgba(26,58,255,0.65)';
     ctx2.fillRect(viewStart * W, bY, (viewEnd - viewStart) * W, bH);
   }
+
+  // Playhead: show current position when a chop pad is playing
+  if (playingChopIdx >= 0 && ctx) {
+    const cp = chopPads[playingChopIdx];
+    if (cp && cp.startRatio >= 0) {
+      const elapsed = ctx.currentTime - playheadStart;
+      const progress = Math.min(1, elapsed / Math.max(0.001, playheadDuration));
+      const bufPos = cp.startRatio + progress * (cp.endRatio - cp.startRatio);
+      const px = bufToCanvas(bufPos, W);
+      if (px >= 0 && px <= W) {
+        ctx2.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx2.lineWidth = 1.5;
+        ctx2.shadowColor = '#ffffff';
+        ctx2.shadowBlur = 4;
+        ctx2.beginPath();
+        ctx2.moveTo(px, 0);
+        ctx2.lineTo(px, H);
+        ctx2.stroke();
+        ctx2.shadowBlur = 0;
+      }
+    }
+  }
 }
 
 // Canvas: pinch-to-zoom (2 fingers) + drag selection (1 finger)
@@ -1228,23 +1391,24 @@ chopBtn.addEventListener('click', () => {
   boot();
   const sliced = sliceBuffer(waveBuffer, s, e);
 
-  // Count assigned chops for naming
-  const chopCount = pads.filter(p => p.buf).length + 1;
-  const idx = pads.findIndex(p => !p.buf);
-  if (idx === -1) { alert('패드가 꽉 찼습니다 (16/16)'); return; }
+  const chopCount = chopPads.filter(p => p.buf).length + 1;
+  const idx = chopPads.findIndex(p => !p.buf);
+  if (idx === -1) { alert('CHOP 패드가 꽉 찼습니다 (8/8)'); return; }
 
-  pads[idx].buf   = sliced;
-  pads[idx].name  = `C${chopCount}`;
-  pads[idx].color = PAD_COLORS[idx % PAD_COLORS.length];
-  pads[idx].pitch = 0;
-  refreshPad(idx);
+  chopPads[idx].buf        = sliced;
+  chopPads[idx].name       = `C${chopCount}`;
+  chopPads[idx].color      = PAD_COLORS[idx % PAD_COLORS.length];
+  chopPads[idx].pitch      = 0;
+  chopPads[idx].startRatio = s;
+  chopPads[idx].endRatio   = e;
+  refreshChopPad(idx);
 
-  // Flash the assigned pad
-  const el = padGrid.children[idx];
+  // Flash the assigned chop pad
+  const el = chopPadGrid.children[idx];
   el.classList.add('active');
   setTimeout(() => el.classList.remove('active'), 180);
 
-  waveHint.textContent = `PAD ${idx+1}에 할당됨 → 다시 선택하거나 CHOP 반복`;
+  waveHint.textContent = `CHOP PAD ${idx+1}에 할당됨`;
 });
 
 // ─── Drum Loop Patterns ────────────────────────────────────────────────────────
@@ -1473,6 +1637,8 @@ const KEY_TO_PAD = {
 };
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  const ci = KEY_TO_CHOP[e.key.toLowerCase()];
+  if (ci !== undefined) { boot(); playChopPad(ci); return; }
   const idx = KEY_TO_PAD[e.key.toLowerCase()];
   if (idx === undefined) return;
   boot();
@@ -1561,6 +1727,305 @@ function audioBufferToWAV(ab) {
   new Int16Array(wav, 44).set(pcm);
   return wav;
 }
+
+// ─── CHOP Pads ─────────────────────────────────────────────────────────────────
+const chopPads = Array.from({length:8}, () => ({buf:null, name:'', color:'', pitch:0, startRatio:-1, endRatio:-1}));
+const activeChopSrc = new Array(8).fill(null);
+
+// Playback tracking for waveform playhead
+let playingChopIdx = -1;
+let playheadStart = 0;
+let playheadDuration = 0;
+
+// Sheet recording state
+const sheetNotes = [];
+let isSheetRecording = false;
+let sheetRecOrigin = 0;
+const pendingChopNotes = new Map();
+
+const chopPadGrid = document.getElementById('chopPadGrid');
+const CHOP_KEYS = ['5','6','7','8','t','y','u','i'];
+
+function buildChopPads() {
+  for (let i = 0; i < 8; i++) {
+    const el = document.createElement('div');
+    el.className = 'chop-pad';
+    el.dataset.ci = i;
+    el.innerHTML = `<span class="chop-pad-num">${i+1}</span><span class="chop-pad-name"></span><span class="chop-pad-key">${CHOP_KEYS[i].toUpperCase()}</span>`;
+    chopPadGrid.appendChild(el);
+  }
+}
+
+function refreshChopPad(i) {
+  const el = chopPadGrid.children[i];
+  const p  = chopPads[i];
+  el.classList.toggle('filled', !!p.buf);
+  el.style.background = p.buf ? p.color : '';
+  const nameEl = el.querySelector('.chop-pad-name');
+  nameEl.textContent = p.buf ? (p.name || `C${i+1}`) : '';
+  let dot = el.querySelector('.chop-pad-empty-dot');
+  if (!p.buf) {
+    if (!dot) { dot = document.createElement('div'); dot.className = 'chop-pad-empty-dot'; el.appendChild(dot); }
+  } else {
+    if (dot) dot.remove();
+  }
+}
+
+function playChopPad(i) {
+  const p = chopPads[i];
+  if (!p.buf || !ctx) return;
+
+  // Stop any currently playing chop (mute group)
+  for (let j = 0; j < 8; j++) {
+    if (activeChopSrc[j]) {
+      try { activeChopSrc[j].stop(); } catch(e) {}
+      activeChopSrc[j] = null;
+      chopPadGrid.children[j].classList.remove('active');
+    }
+  }
+
+  // Finish any pending sheet notes for other pads
+  if (isSheetRecording) {
+    for (const [padIdx, startSec] of pendingChopNotes) {
+      if (padIdx !== i) {
+        const dur = ctx.currentTime - sheetRecOrigin - startSec;
+        sheetNotes.push({pad: padIdx, startSec, durSec: Math.max(0.05, dur)});
+        pendingChopNotes.delete(padIdx);
+      }
+    }
+  }
+
+  const src = ctx.createBufferSource();
+  src.buffer = p.buf;
+  src.playbackRate.value = Math.pow(2, (p.pitch || 0) / 12);
+  src.connect(smplGainNode);
+  src.start();
+  activeChopSrc[i] = src;
+
+  // Playhead tracking
+  playingChopIdx = i;
+  playheadStart = ctx.currentTime;
+  playheadDuration = p.buf.duration / Math.pow(2, (p.pitch || 0) / 12);
+  animatePlayhead();
+
+  // Sheet note start
+  if (isSheetRecording) {
+    pendingChopNotes.set(i, ctx.currentTime - sheetRecOrigin);
+  }
+
+  const el = chopPadGrid.children[i];
+  el.classList.add('active');
+  src.onended = () => {
+    el.classList.remove('active');
+    if (activeChopSrc[i] === src) activeChopSrc[i] = null;
+    if (playingChopIdx === i) { playingChopIdx = -1; drawWave(); }
+    // Finish sheet note
+    if (isSheetRecording && pendingChopNotes.has(i)) {
+      const startSec = pendingChopNotes.get(i);
+      const dur = ctx.currentTime - sheetRecOrigin - startSec;
+      sheetNotes.push({pad: i, startSec, durSec: Math.max(0.05, dur)});
+      pendingChopNotes.delete(i);
+      if (sheetView.classList.contains('open')) drawSheet();
+    }
+  };
+}
+
+function animatePlayhead() {
+  if (playingChopIdx < 0) return;
+  drawWave();
+  requestAnimationFrame(animatePlayhead);
+}
+
+// Chop pad tap events
+let chopLpTimer = null, chopLpIdx = -1, chopLpStart = null;
+
+chopPadGrid.addEventListener('pointerdown', e => {
+  const el = e.target.closest('.chop-pad');
+  if (!el) return;
+  e.preventDefault();
+  const i = +el.dataset.ci;
+  chopLpIdx = i;
+  chopLpStart = {x: e.clientX, y: e.clientY};
+  chopLpTimer = setTimeout(() => {
+    chopLpTimer = null; chopLpIdx = -1; chopLpStart = null;
+  }, 500);
+}, {passive: false});
+
+chopPadGrid.addEventListener('pointermove', e => {
+  if (!chopLpTimer || !chopLpStart) return;
+  const dx = e.clientX - chopLpStart.x, dy = e.clientY - chopLpStart.y;
+  if (dx*dx + dy*dy > 64) { clearTimeout(chopLpTimer); chopLpTimer = null; chopLpIdx = -1; chopLpStart = null; }
+}, {passive: true});
+
+chopPadGrid.addEventListener('pointerup', e => {
+  if (chopLpTimer) {
+    clearTimeout(chopLpTimer); chopLpTimer = null;
+    const i = chopLpIdx; chopLpIdx = -1; chopLpStart = null;
+    if (i < 0) return;
+    boot(); playChopPad(i);
+  } else { chopLpIdx = -1; chopLpStart = null; }
+}, {passive: true});
+
+chopPadGrid.addEventListener('pointercancel', () => {
+  clearTimeout(chopLpTimer); chopLpTimer = null; chopLpIdx = -1; chopLpStart = null;
+}, {passive: true});
+
+// Keyboard: 5-8 T-Y-U-I for chop pads 1-8
+const KEY_TO_CHOP = {'5':0,'6':1,'7':2,'8':3,'t':4,'y':5,'u':6,'i':7};
+
+// ─── Sheet Recording ────────────────────────────────────────────────────────────
+const sheetRecBtn  = document.getElementById('sheetRecBtn');
+const sheetViewBtn = document.getElementById('sheetViewBtn');
+const sheetView    = document.getElementById('sheetView');
+const sheetCanvas  = document.getElementById('sheetCanvas');
+const clearSheetBtn = document.getElementById('clearSheetBtn');
+const midiExportBtn = document.getElementById('midiExportBtn');
+const sheetCtx     = sheetCanvas.getContext('2d');
+
+sheetRecBtn.addEventListener('click', () => {
+  if (!isSheetRecording) {
+    boot();
+    isSheetRecording = true;
+    sheetRecOrigin = ctx.currentTime;
+    sheetRecBtn.textContent = '■ STOP';
+    sheetRecBtn.classList.add('recording');
+  } else {
+    isSheetRecording = false;
+    sheetRecBtn.textContent = '● REC';
+    sheetRecBtn.classList.remove('recording');
+    // Finalize any held notes
+    for (const [padIdx, startSec] of pendingChopNotes) {
+      const dur = ctx.currentTime - sheetRecOrigin - startSec;
+      sheetNotes.push({pad: padIdx, startSec, durSec: Math.max(0.05, dur)});
+    }
+    pendingChopNotes.clear();
+    if (sheetView.classList.contains('open')) drawSheet();
+  }
+});
+
+sheetViewBtn.addEventListener('click', () => {
+  const isOpen = sheetView.classList.toggle('open');
+  sheetViewBtn.classList.toggle('active', isOpen);
+  if (isOpen) { resizeSheetCanvas(); drawSheet(); }
+});
+
+clearSheetBtn.addEventListener('click', () => {
+  sheetNotes.length = 0;
+  drawSheet();
+});
+
+midiExportBtn.addEventListener('click', () => {
+  if (sheetNotes.length === 0) { alert('기록된 노트가 없습니다'); return; }
+  const midi = generateMIDI(sheetNotes);
+  const blob = new Blob([midi], {type: 'audio/midi'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'bct-chop.mid'; a.click();
+  URL.revokeObjectURL(url);
+});
+
+function resizeSheetCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = sheetCanvas.offsetWidth, h = sheetCanvas.offsetHeight;
+  sheetCanvas.width  = Math.round(w * dpr);
+  sheetCanvas.height = Math.round(h * dpr);
+  sheetCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function drawSheet() {
+  const W = sheetCanvas.offsetWidth, H = sheetCanvas.offsetHeight;
+  if (!W || !H) return;
+  sheetCtx.clearRect(0, 0, W, H);
+  sheetCtx.fillStyle = '#091522';
+  sheetCtx.fillRect(0, 0, W, H);
+
+  if (sheetNotes.length === 0) {
+    sheetCtx.fillStyle = 'rgba(221,216,208,0.2)';
+    sheetCtx.font = '500 10px "Public Sans"';
+    sheetCtx.textAlign = 'center';
+    sheetCtx.textBaseline = 'middle';
+    sheetCtx.fillText('REC 후 CHOP 패드를 연주하면 기록됩니다', W/2, H/2);
+    return;
+  }
+
+  const totalDur = Math.max(...sheetNotes.map(n => n.startSec + n.durSec), 1);
+  const rowH = H / 8;
+
+  // Row dividers
+  sheetCtx.strokeStyle = 'rgba(255,255,255,0.05)';
+  sheetCtx.lineWidth = 0.5;
+  for (let i = 1; i < 8; i++) {
+    sheetCtx.beginPath();
+    sheetCtx.moveTo(0, i * rowH); sheetCtx.lineTo(W, i * rowH);
+    sheetCtx.stroke();
+  }
+
+  // Notes
+  sheetNotes.forEach(n => {
+    const x = (n.startSec / totalDur) * W;
+    const w = Math.max(4, (n.durSec / totalDur) * W);
+    const y = n.pad * rowH;
+    sheetCtx.fillStyle = PAD_COLORS[n.pad % PAD_COLORS.length];
+    sheetCtx.beginPath();
+    sheetCtx.roundRect(x, y + 1, w, rowH - 2, 2);
+    sheetCtx.fill();
+    if (w > 18) {
+      sheetCtx.fillStyle = 'rgba(0,0,0,0.7)';
+      sheetCtx.font = '500 8px "Public Sans"';
+      sheetCtx.textAlign = 'left';
+      sheetCtx.textBaseline = 'middle';
+      sheetCtx.fillText(chopPads[n.pad].name || `C${n.pad+1}`, x + 3, y + rowH/2);
+    }
+  });
+}
+
+function generateMIDI(notes) {
+  const PPQ = 480;
+  const BPM = 120;
+  const microspb = Math.round(60000000 / BPM);
+  const secToTick = s => Math.round(s * PPQ * BPM / 60);
+  const NOTE_MAP  = [60,62,64,65,67,69,71,72]; // C4 D4 E4 F4 G4 A4 B4 C5
+
+  function vlq(n) {
+    const b = [n & 0x7F]; n >>= 7;
+    while (n > 0) { b.unshift((n & 0x7F) | 0x80); n >>= 7; }
+    return b;
+  }
+
+  const events = [];
+  notes.forEach(n => {
+    const note = NOTE_MAP[n.pad % 8];
+    events.push({tick: secToTick(n.startSec),             type:'on',  note, vel:100});
+    events.push({tick: secToTick(n.startSec + n.durSec),  type:'off', note, vel:0});
+  });
+  events.sort((a,b) => a.tick - b.tick);
+
+  const track = [];
+  track.push(...vlq(0), 0xFF,0x51,0x03,
+    (microspb>>16)&0xFF,(microspb>>8)&0xFF,microspb&0xFF);
+
+  let prev = 0;
+  events.forEach(ev => {
+    const delta = ev.tick - prev; prev = ev.tick;
+    track.push(...vlq(delta), ev.type==='on'?0x90:0x80, ev.note, ev.vel);
+  });
+  track.push(...vlq(0), 0xFF,0x2F,0x00);
+
+  const buf  = new ArrayBuffer(14 + 8 + track.length);
+  const view = new DataView(buf);
+  let off = 0;
+  [0x4D,0x54,0x68,0x64].forEach(b => view.setUint8(off++,b));
+  view.setUint32(off,6,false); off+=4;
+  view.setUint16(off,0,false); off+=2;
+  view.setUint16(off,1,false); off+=2;
+  view.setUint16(off,PPQ,false); off+=2;
+  [0x4D,0x54,0x72,0x6B].forEach(b => view.setUint8(off++,b));
+  view.setUint32(off,track.length,false); off+=4;
+  track.forEach(b => view.setUint8(off++,b));
+  return buf;
+}
+
+buildChopPads();
 
 // ─── Mix Recorder ──────────────────────────────────────────────────────────────
 const mixRecBtn  = document.getElementById('mixRecBtn');
