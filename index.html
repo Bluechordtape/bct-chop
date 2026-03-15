@@ -1162,6 +1162,26 @@ function drawWave() {
     ctx2.fillRect(viewStart * W, bY, (viewEnd - viewStart) * W, bH);
   }
 
+  // Playhead: preview playback position
+  if (previewSrc && ctx && previewStartRatio >= 0) {
+    const elapsed = ctx.currentTime - previewStartTime + previewOffset;
+    const dur = previewSlicedBuf ? previewSlicedBuf.duration : 1;
+    const progress = Math.min(1, elapsed / Math.max(0.001, dur));
+    const bufPos = previewStartRatio + progress * (previewEndRatio - previewStartRatio);
+    const px = bufToCanvas(bufPos, W);
+    if (px >= 0 && px <= W) {
+      ctx2.strokeStyle = 'rgba(255,220,80,0.95)';
+      ctx2.lineWidth = 1.5;
+      ctx2.shadowColor = 'rgba(255,220,80,0.6)';
+      ctx2.shadowBlur = 5;
+      ctx2.beginPath(); ctx2.moveTo(px, 0); ctx2.lineTo(px, H); ctx2.stroke();
+      // Handle triangle at top
+      ctx2.fillStyle = 'rgba(255,220,80,0.95)';
+      ctx2.beginPath(); ctx2.moveTo(px-5,0); ctx2.lineTo(px+5,0); ctx2.lineTo(px,7); ctx2.closePath(); ctx2.fill();
+      ctx2.shadowBlur = 0;
+    }
+  }
+
   // Playhead: show current position when a chop pad is playing
   if (playingChopIdx >= 0 && ctx) {
     const cp = chopPads[playingChopIdx];
@@ -1193,12 +1213,18 @@ canvas.addEventListener('pointerdown', e => {
   activePointers.set(e.pointerId, {x: e.clientX, y: e.clientY});
 
   if (activePointers.size === 1) {
-    // Single finger — start selection drag
-    isDragging = true;
     const buf = canvasToBuf(e.clientX - r.left, r.width);
-    selA = Math.max(0, Math.min(1, buf));
-    selB = selA;
-    drawWave();
+    if (previewSrc) {
+      // Preview is playing — seek on tap/drag
+      isSeeking = true;
+      seekPreview(Math.max(0, Math.min(1, buf)));
+    } else {
+      // Normal selection drag
+      isDragging = true;
+      selA = Math.max(0, Math.min(1, buf));
+      selB = selA;
+      drawWave();
+    }
   } else if (activePointers.size === 2) {
     // Second finger — switch to pinch zoom, cancel selection drag
     isDragging = false;
@@ -1235,6 +1261,13 @@ canvas.addEventListener('pointermove', e => {
     viewStart = newStart;
     viewEnd   = newEnd;
     drawWave();
+  } else if (isSeeking && activePointers.size === 1 && previewSrc) {
+    // ── Scrub during preview ──
+    targetSeekRatio = Math.max(0, Math.min(1, canvasToBuf(e.clientX - r.left, r.width)));
+    if (!seekRafId) seekRafId = requestAnimationFrame(() => {
+      seekRafId = null;
+      if (isSeeking && targetSeekRatio >= 0) seekPreview(targetSeekRatio);
+    });
   } else if (isDragging && activePointers.size === 1) {
     // ── Drag selection ──
     selB = Math.max(0, Math.min(1, canvasToBuf(e.clientX - r.left, r.width)));
@@ -1248,6 +1281,7 @@ canvas.addEventListener('pointerup', e => {
   if (activePointers.size === 0) {
     // All fingers lifted
     pinchStartView = null;
+    isSeeking = false; seekRafId = null; targetSeekRatio = -1;
     if (isDragging) {
       isDragging = false;
       const span = Math.abs(selB - selA);
@@ -1359,11 +1393,45 @@ function sliceBuffer(buf, s, e) {
 // ─── Preview selection ─────────────────────────────────────────────────────────
 const prevBtn = document.getElementById('prevBtn');
 let previewSrc = null;
+let previewSlicedBuf = null;
+let previewStartRatio = -1, previewEndRatio = -1;
+let previewStartTime = 0, previewOffset = 0;
+let isSeeking = false, seekRafId = null, targetSeekRatio = -1;
 
 function stopPreview() {
   if (previewSrc) { try { previewSrc.stop(); } catch(e){} previewSrc = null; }
+  previewStartRatio = -1;
+  isSeeking = false;
   prevBtn.textContent = '▶ PRE';
   prevBtn.classList.remove('playing');
+  drawWave();
+}
+
+function startPreviewFrom(offsetSec) {
+  if (previewSrc) { try { previewSrc.stop(); } catch(e){} previewSrc = null; }
+  const src = ctx.createBufferSource();
+  src.buffer = previewSlicedBuf;
+  src.connect(smplGainNode);
+  src.start(0, Math.max(0, Math.min(previewSlicedBuf.duration - 0.001, offsetSec)));
+  previewSrc = src;
+  previewStartTime = ctx.currentTime;
+  previewOffset = offsetSec;
+  src.onended = () => { if (previewSrc === src) stopPreview(); };
+  animatePreview();
+}
+
+function seekPreview(bufRatio) {
+  if (!previewSlicedBuf || previewStartRatio < 0) return;
+  const s = previewStartRatio, e = previewEndRatio;
+  const clamped = Math.max(s, Math.min(e, bufRatio));
+  const offsetSec = ((clamped - s) / (e - s)) * previewSlicedBuf.duration;
+  startPreviewFrom(offsetSec);
+}
+
+function animatePreview() {
+  if (!previewSrc) return;
+  drawWave();
+  requestAnimationFrame(animatePreview);
 }
 
 prevBtn.addEventListener('click', () => {
@@ -1372,15 +1440,12 @@ prevBtn.addEventListener('click', () => {
   boot();
   const s = Math.min(selA, selB), e = Math.max(selA, selB);
   if (e - s < 0.001) return;
-  const sliced = sliceBuffer(waveBuffer, s, e);
-  const src = ctx.createBufferSource();
-  src.buffer = sliced;
-  src.connect(smplGainNode);
-  src.start();
-  previewSrc = src;
+  previewSlicedBuf = sliceBuffer(waveBuffer, s, e);
+  previewStartRatio = s;
+  previewEndRatio   = e;
   prevBtn.textContent = '■ PRE';
   prevBtn.classList.add('playing');
-  src.onended = stopPreview;
+  startPreviewFrom(0);
 });
 
 // ─── Chop ──────────────────────────────────────────────────────────────────────
